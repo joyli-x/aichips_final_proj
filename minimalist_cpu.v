@@ -1,7 +1,11 @@
 `include "code.v"
 `include "mem.v"
 
-module MinimalistCPU(
+module MinimalistCPU
+#(
+    parameter [31:0] RESET_SP = 512
+)
+(
     input CLK, RES, HLT,
     input [31:0] DATAI,
     output [31:0] DATAO, DADDR,
@@ -17,8 +21,9 @@ rom urom (
     .A ( IADDR )  // instruction addr bus
 );
 
-darkriscv u_rvcpu
-(
+darkriscv #(
+   .RESET_SP (RESET_SP)
+) u_rvcpu(
     .CLK ( CLK ) ,   // clock
     .RES ( RES ) ,   // reset
     .HLT ( HLT ),   // halt

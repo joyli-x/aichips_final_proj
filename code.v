@@ -22,10 +22,10 @@
 // configuration file
 
 module darkriscv
-//#(
+#(
 //    parameter [31:0] RESET_PC = 0,
-//    parameter [31:0] RESET_SP = 4096
-//) 
+   parameter [31:0] RESET_SP = 512
+) 
 (
     input             CLK,   // clock
     input             RES,   // reset
@@ -216,7 +216,7 @@ module darkriscv
         FLUSH <= XRES ? 1 : HLT ? FLUSH :        // reset and halt
                        (JAL||JALR||BMUX);  // flush the pipeline!
 
-        REG1[DPTR] <=   XRES ? (RESMODE[4:0]==2 ? `__RESETSP__ : 0)  :        // reset sp
+        REG1[DPTR] <=   XRES ? (RESMODE[4:0]==2 ? RESET_SP : 0)  :        // reset sp
                        HLT ? REG1[DPTR] :        // halt
                      !DPTR ? 0 :                // x0 = 0, always!
                      AUIPC ? PCSIMM :
@@ -228,7 +228,7 @@ module darkriscv
                        //CCC ? CDATA : 
                              REG1[DPTR];
       
-        REG2[DPTR] <=   XRES ? (RESMODE[4:0]==2 ? `__RESETSP__ : 0) :        // reset sp     
+        REG2[DPTR] <=   XRES ? (RESMODE[4:0]==2 ? RESET_SP : 0) :        // reset sp     
                        HLT ? REG2[DPTR] :        // halt
                      !DPTR ? 0 :                // x0 = 0, always!
                      AUIPC ? PCSIMM :
@@ -270,8 +270,13 @@ module darkriscv
     assign DEBUG = { XRES, |FLUSH, SCC, LCC };
 
     initial begin
-    $monitor("---reg1[11]/a1=%8d---reg1[8]/s0=%8d---, ",REG1[11],REG1[8]);
-end
+    // $monitor("---reg1[2]/sp=%8d---reg1[14]/a4=%8d---reg1[15]/a4=%8d---reg2[2]/sp=%8d---reg2[14]/a4=%8d---reg2[15]/a4=%8d---",
+    //      REG1[2], REG1[14], REG1[15], REG2[2], REG2[14], REG2[15]);
+    $monitor("---reg1[2]/sp=%d---reg1[8]/s0=%d---reg1[14]/a4=%d---reg1[15]/a4=%d---PC=%d---",
+         REG1[2], REG1[8], REG1[14], REG1[15], PC);
+    // $monitor("---reg1[2]/sp=%d---reg1[8]/s0=%d---PC=%d---",
+    //      REG1[2], REG1[8], PC);
+    end
 
 endmodule
 
