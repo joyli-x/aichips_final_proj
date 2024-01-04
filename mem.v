@@ -40,7 +40,7 @@ module rom (
     input [31:0] A
 );
 
-parameter LEN = 128;
+parameter LEN = 10240;
 
 reg [31:0] mem_core [0:LEN-1];
 
@@ -50,11 +50,11 @@ initial begin
     for(i=0;i<=LEN-1;i=i+1) begin
         mem_core[i] = 0;
     end
-    $readmemh("test_code.hex",mem_core);
+    $readmemh("mat_code.hex",mem_core);
 end
 
 always @(posedge CLK) begin
-    Q <= mem_core[A];
+    Q <= mem_core[(A>>2)];
 end
     
 endmodule

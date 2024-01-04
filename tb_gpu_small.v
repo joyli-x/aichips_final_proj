@@ -14,40 +14,53 @@ initial begin
 end
 
 reg CLK, RES, HLT;
-reg [31:0] a1, b1, a2, b2, a3, b3, a4, b4;
+reg [256*32-1:0] input_matrix_A; //注意矩阵是倒着存的
+reg [256*32-1:0] input_matrix_B;
+wire [256*32-1:0] result_matrix;
+
 
 initial CLK = 0;
 always #2 CLK = ~CLK;
 
 integer clkcycle;
 always @(posedge CLK) begin
-    if(clkcycle==100) $stop;
+    if(clkcycle==10240) $stop;
     if(~RES) clkcycle <= clkcycle + 1;
 end
 
+// 通过外部文件初始化的数组，用于中转读取数据
+reg signed [31:0] input_A_array[0:255];
+reg signed [31:0] input_B_array[0:255];
+
+integer i;
 initial begin
     clkcycle = 0;
     RES = 1;
     HLT = 0;
-    a1 = 0;
-    b1 = 0;
-    a2 = 0;
-    b2 = 0;
-    a3 = 0;
-    b3 = 0;
-    a4 = 0;
-    b4 = 0;
+
+    // 读入input_A.hex和input_B.hex文件
+    $readmemh("input_A.hex", input_A_array);
+    $readmemh("input_B.hex", input_B_array);
+
+    // for (i = 0; i < 256; i = i + 1) begin
+    //     input_matrix_A[(i*32+31) -: 32] = 0;
+    //     input_matrix_B[(i*32+31) -: 32] = 0;
+    // end
+
+    // 初始化input_matrix_A和input_matrix_B
+    for (i = 0; i < 256; i = i + 1) begin
+        input_matrix_A[i*32 +: 32] = input_A_array[i];
+        input_matrix_B[i*32 +: 32] = input_B_array[i];
+    end
+
     
     #9 
     RES = 0;
-    a1 = 1;
-    b1 = 2;
-    a2 = 3;
-    b2 = 4;
-    a3 = 5;
-    b3 = 6;
-    a4 = 7;
-    b4 = 8;
+    // input_matrix_A[(0*32+31) -: 32] = -4;
+    // input_matrix_A[((1*4*16+0)*32+31) -: 32] = 4;
+    // input_matrix_A[(1*32+31) -: 32] = 12;
+    // input_matrix_B[(0*32+31) -: 32] = 1;
+    // input_matrix_B[(1*32+31) -: 32] = 23;
 
 end
 
@@ -56,14 +69,9 @@ GPU gpu
     .CLK ( CLK ) ,   // clock
     .GPU_RES ( RES ) ,   // reset
     .HLT ( HLT ) ,   // halt
-    .a1 ( a1 ) ,
-    .b1 ( b1 ) ,
-    .a2 ( a2 ) ,
-    .b2 ( b2 ) ,
-    .a3 ( a3 ) ,
-    .b3 ( b3 ) ,
-    .a4 ( a4 ) ,
-    .b4 ( b4 ) 
+    .input_matrix_A ( input_matrix_A ) ,
+    .input_matrix_B ( input_matrix_B ) ,
+    .result_matrix ( result_matrix )
 );
 
     

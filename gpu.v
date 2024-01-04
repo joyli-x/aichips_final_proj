@@ -1,16 +1,14 @@
 `include "minimalist_cpu.v"
 `include "unified_multiport_ram.v"
 
-// 修改栈指针sp，a_0, a_1, a_2
 
 module GPU(
     input CLK,
     input GPU_RES,
     input HLT,
-    input [31:0] a1, b1, a2, b2, a3, b3, a4, b4
-    // intput [31:0] input_matrix_A [0:15][0:15],
-    // intput [31:0] input_matrix_B [0:15][0:15],
-    // output [31:0] result_matrix [0:15][0:15] // 输出为16*16矩阵，假设一次可以输出整个矩阵
+    input [256*32-1:0] input_matrix_A,
+    input [256*32-1:0] input_matrix_B,
+    output [256*32-1:0] result_matrix  // 输出为16*16矩阵，假设一次可以输出整个矩阵
 );
     wire WR_0, WR_1, WR_2, WR_3;
     reg WR_GPU;
@@ -19,84 +17,115 @@ module GPU(
     wire [31:0] DATAI_1, DATAO_1, DADDR_1;
     wire [31:0] DATAI_2, DATAO_2, DADDR_2;
     wire [31:0] DATAI_3, DATAO_3, DADDR_3;
-    reg [31:0] GPU_DATAO_0, GPU_DADDR_0, GPU_DATAO_1, GPU_DADDR_1;
+    reg [31:0] GPU_DATAO_0, GPU_DADDR_0, GPU_DATAO_1, GPU_DADDR_1, GPU_DATAO_2, GPU_DADDR_2;
+    wire [31:0] GPU_DATAI_0;
     wire en = 1;
-    wire RES = 0;
+    
+    parameter [31:0] start_a_addr = 2048;
+    parameter [31:0] start_b_addr = 4096;
+    parameter [31:0] start_result_addr = 6144;
 
-    reg datas_ready; // To control the reset signal.
+    reg reg_ready; // To control the reset signal.
+    reg matrice_ready; // To control the matrice initialization.
+    reg [31:0] matrice_cnt;
+    reg [128:0] cnt_clk;
     reg [3:0] cnt;
-    assign RESET = GPU_RES | ~datas_ready;
+    assign RESET = GPU_RES | (!reg_ready);
 
     initial begin
-        datas_ready = 0;
+        matrice_ready = 0;
+        reg_ready = 0;
+        matrice_cnt = 0;
+        cnt_clk = 0;
         cnt = 0;
         WR_GPU = 0;
     end
 
-    // Initalize a0, a1
+    // initialize the matrice
     always @(posedge CLK) begin
-        if (!datas_ready && !GPU_RES) begin
-            if (cnt==0) begin
-                // reg a0
-                GPU_DATAO_0 <= a1;
-                GPU_DADDR_0 <= 236;
-                // reg a1
-                GPU_DATAO_1 <= b1;
-                GPU_DADDR_1 <= 232;
+        if (!GPU_RES && !matrice_ready) begin
+            // A
+            GPU_DATAO_0 <= input_matrix_A[(matrice_cnt*32+31) -: 32];
+            GPU_DADDR_0 <= matrice_cnt * 4 + start_a_addr; //这里有点奇怪
+            // B
+            GPU_DATAO_1 <= input_matrix_B[(matrice_cnt*32+31) -: 32];
+            GPU_DADDR_1 <= matrice_cnt * 4 + start_b_addr;
 
-                WR_GPU <= 1;
-                cnt <= cnt + 1;
-            end 
-            else if (cnt==1) begin
-                // reg a0
-                GPU_DATAO_0 <= a2;
-                GPU_DADDR_0 <= 492;
-                // reg a1
-                GPU_DATAO_1 <= b2;
-                GPU_DADDR_1 <= 488;
-                
-                WR_GPU <= 1;
-                cnt <= cnt + 1;
-            end 
-            else if (cnt==2) begin
-                // reg a0
-                GPU_DATAO_0 <= a3;
-                GPU_DADDR_0 <= 748;
-                // reg a1
-                GPU_DATAO_1 <= b3;
-                GPU_DADDR_1 <= 744;
-                
-                WR_GPU <= 1;
-                cnt <= cnt + 1;
-            end 
-            else if (cnt==3) begin
-                // reg a0
-                GPU_DATAO_0 <= a4;
-                GPU_DADDR_0 <= 1004;
-                // reg a1
-                GPU_DATAO_1 <= b4;
-                GPU_DADDR_1 <= 1000;
-                
-                WR_GPU <= 1;
-                cnt <= cnt + 1;
-                datas_ready <= 1;
+            WR_GPU <= 1;
+
+            matrice_cnt <= matrice_cnt + 1;
+            if (matrice_cnt == 255) begin
+                matrice_ready <= 1;
             end
         end
-        else if (datas_ready) begin
+    end
+
+    // Initalize a0, a1, a2
+    always @(posedge CLK) begin
+        if (matrice_ready && !reg_ready && !GPU_RES) begin
+            // reg a0
+            GPU_DATAO_0 <= start_a_addr + cnt*4*16*4;
+            GPU_DADDR_0 <= (256-20) + 256*cnt;
+            // reg a1
+            GPU_DATAO_1 <= start_b_addr;
+            GPU_DADDR_1 <= (256-24) + 256*cnt;
+            // reg a2
+            GPU_DATAO_2 <= start_result_addr + cnt*4*16*4;
+            GPU_DADDR_2 <= (256-28) + 256*cnt;
+
+            WR_GPU <= 1;
+            cnt <= cnt + 1;
+            if (cnt==3) begin
+                reg_ready <= 1;
+            end
+        end
+        else if (reg_ready) begin
             // Normal operation
             WR_GPU <= 0;  // Make sure to disable write after initialization is done
         end
     end
 
-    // 临时变量储存结果矩阵
-    reg [31:0] result_matrix_interim [0:3][0:15][0:15];
+    integer clkcycle = 0;
+    parameter [31:0] start_load = 9000;
+    reg signed [31:0] temp_res [0:256];
+    integer file, i; // Variables for file I/O and loop counter
+
+    // File operation for simulation only, not synthesizable
+    initial begin
+        file = $fopen("result.txt", "w"); // Open file for writing
+    end
+
+    always @(posedge CLK) begin
+        if(RESET) begin // Corrected RESET condition
+            clkcycle <= 0;
+        end 
+        else begin
+            if(clkcycle >= start_load && clkcycle < (start_load+257))begin
+                GPU_DADDR_0 <= start_result_addr + 4*(clkcycle-start_load);
+                temp_res[clkcycle-start_load] <= GPU_DATAI_0; // Load temp_res, assuming GPU_DATAI_0 is available
+            end
+            clkcycle <= clkcycle + 1;
+
+            // After all modifications are done OR halt signal is asserted, output the results
+            if(clkcycle >= (start_load+257)) begin
+                for(i = 1; i < 257; i = i + 1) begin
+                    // Check if the file is open, since the $fwrite can only be executed if the file is available
+                    if(file) begin
+                        $fwrite(file, "%d\n", temp_res[i]); // Write each integer on a new line
+                    end
+                end
+                $fclose(file); // Close the file
+                // $finish; // End the simulation, if necessary
+            end
+        end
+    end
 
     MinimalistCPU #( 
         .RESET_SP (256)
     ) u0 
     (
         .CLK ( CLK ) ,   // clock
-        .RES ( RES ) ,   // reset
+        .RES ( RESET ) ,   // reset
         .HLT ( HLT ),   // halt
         .IDLE (IDLE_0),  // idle
         
@@ -112,7 +141,7 @@ module GPU(
     ) u1
     (
         .CLK ( CLK ) ,   // clock
-        .RES ( RES ) ,   // reset
+        .RES ( RESET ) ,   // reset
         .HLT ( HLT ),   // halt
         .IDLE (IDLE_1),  // idle
         
@@ -128,7 +157,7 @@ module GPU(
     ) u2
     (
         .CLK ( CLK ) ,   // clock
-        .RES ( RES ) ,   // reset
+        .RES ( RESET ) ,   // reset
         .HLT ( HLT ),   // halt
         .IDLE (IDLE_2),  // idle
         
@@ -144,7 +173,7 @@ module GPU(
     ) u3   
     (
         .CLK ( CLK ) ,   // clock
-        .RES ( RES ) ,   // reset
+        .RES ( RESET ) ,   // reset
         .HLT ( HLT ),   // halt
         .IDLE (IDLE_3),  // idle
         
@@ -162,11 +191,16 @@ module GPU(
 
         .gpu_we_0 (WR_GPU),
         .gpu_d_0 (GPU_DATAO_0),
+        .gpu_q_0 (GPU_DATAI_0),
         .gpu_addr_0 (GPU_DADDR_0),
 
         .gpu_we_1 (WR_GPU),
         .gpu_d_1 (GPU_DATAO_1),
         .gpu_addr_1 (GPU_DADDR_1),
+
+        .gpu_we_2 (WR_GPU),
+        .gpu_d_2 (GPU_DATAO_2),
+        .gpu_addr_2 (GPU_DADDR_2),
 
         .we0 (WR_0),
         .d0 (DATAO_0),
@@ -188,26 +222,5 @@ module GPU(
         .q3 (DATAI_3),
         .addr3 (DADDR_3)
     );
-    
-    // 需要编写代码来协调所有的CPU实例
-    // 这包括提供指令和数据，启动它们的执行，检查它们的状态，以及将最终结果合并到result_matrix中
-
-    // 暂不提供矩阵计算中断细节。你需要根据实际情况完善
-    // always @(posedge CLK) begin
-    //     if (RES) begin
-    //         // 初始化逻辑
-    //         // 清除或设置逻辑状态
-    //     end else begin
-    //         // 等待CPU准备好
-    //         // 启动计算
-    //         // 检查状态
-    //         // 当所有CPU完成计算时，合并结果并输出
-    //     end
-    // end
-    
-    // // 根据最终的部分结果合并输出
-    // always @(cpus_ready) begin
-    //     // 此处添加逻辑以拼装计算结果
-    // end
 
 endmodule

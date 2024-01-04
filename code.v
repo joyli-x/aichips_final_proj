@@ -242,7 +242,7 @@ module darkriscv
 
         NXPC <= XRES ? `__RESETPC__ : HLT ? NXPC :   // reset and halt
               JREQ ? JVAL :                   // jmp/bra
-                     NXPC+1;                   // normal flow
+                     NXPC+4;                   // normal flow
 
         PC   <= /*XRES ? `__RESETPC__ :*/ HLT ? PC : NXPC; // current program counter
     end
@@ -269,11 +269,15 @@ module darkriscv
 
     assign DEBUG = { XRES, |FLUSH, SCC, LCC };
 
+    wire [31:0] real_PC;
+
+    assign real_PC = (PC>>2);
+
     initial begin
     // $monitor("---reg1[2]/sp=%8d---reg1[14]/a4=%8d---reg1[15]/a4=%8d---reg2[2]/sp=%8d---reg2[14]/a4=%8d---reg2[15]/a4=%8d---",
     //      REG1[2], REG1[14], REG1[15], REG2[2], REG2[14], REG2[15]);
-    $monitor("---reg1[2]/sp=%d---reg1[8]/s0=%d---reg1[14]/a4=%d---reg1[15]/a4=%d---PC=%d---",
-         REG1[2], REG1[8], REG1[14], REG1[15], PC);
+    $monitor("reg1[8]/s0=%d--reg1[10]/a0=%d--a4=%d--a5=%d--IDATA=%h",
+         REG1[8], REG1[10], REG1[14], REG2[15], IDATA);
     // $monitor("---reg1[2]/sp=%d---reg1[8]/s0=%d---PC=%d---",
     //      REG1[2], REG1[8], PC);
     end
