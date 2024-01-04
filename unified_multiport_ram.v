@@ -22,10 +22,22 @@
 //     output reg [31:0] q3,
 //     input [31:0] addr3
 // );
-
 module Unified_MultiPort_RAM (
     input clock,
     input en,
+
+    input gpu_we_0,
+    input [31:0] gpu_d_0,
+    output [31:0] gpu_q_0,
+    input [31:0] gpu_addr_0,
+
+    input gpu_we_1,
+    input [31:0] gpu_d_1,
+    input [31:0] gpu_addr_1,
+
+    input gpu_we_2,
+    input [31:0] gpu_d_2,
+    input [31:0] gpu_addr_2,
 
     input we0,
     input [31:0] d0,
@@ -48,9 +60,9 @@ module Unified_MultiPort_RAM (
     input [31:0] addr3
 );
 
-parameter LEN = 1024;
+parameter LEN = 20480;
 
-reg [31:0] mem [LEN-1:0];
+reg signed [31:0] mem [0:LEN-1];
 
 // initial reset
 integer i;
@@ -58,12 +70,20 @@ initial begin
     for(i=0;i<=LEN-1;i=i+1) begin
         mem[i] = 0;
     end
+    $monitor("---A_mem[2048]=%d---B_mem[4096]=%d---res_mem[6144]=%d---mem[6148]=%d",
+         mem[2048],mem[4096],mem[6144],mem[6148]);
 end
 
 always @(posedge clock) begin
     if(en) begin
-        if(we0 | we1 | we2 | we3) begin
+        if(gpu_we_0 | gpu_we_1 | gpu_we_2| we0 | we1 | we2 | we3) begin
             // if write_enable is asserted, push the data into the address
+            if(gpu_we_0)
+                mem[gpu_addr_0] = gpu_d_0;
+            if(gpu_we_1)
+                mem[gpu_addr_1] = gpu_d_1;
+            if(gpu_we_2)
+                mem[gpu_addr_2] = gpu_d_2;
             if(we0)
                 mem[addr0] = d0 ;
             if(we1)
@@ -78,6 +98,7 @@ end
 
 
 // read change the output whenever mem_core[A] change
+assign gpu_q_0 = mem[gpu_addr_0] ;
 assign q0 = mem[addr0] ;
 assign q1 = mem[addr1] ;
 assign q2 = mem[addr2] ;
